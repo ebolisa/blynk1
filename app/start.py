@@ -1,51 +1,32 @@
+# Module file: start.py
+
 import BlynkLib
 from BlynkTimer import BlynkTimer
+from gpios import *
 import network
-import machine
-import utime
+import gc
 gc.collect()
 
+dprint('Memory free', gc.mem_free())
 
-VERSION = "3.5"
-print('Code version: ', VERSION)
+VERSION = "3.0"
+dprint('Code version: ', VERSION)
 
 # turn led off
 yellow_led.on()
 
-DEBUG = True
-def dprint(*args):
-        if DEBUG:
-            print(*args)
-          
-
-def restart_and_reconnect(reason):
-    dprint('Some went wrong. Reconnecting...')
-    dprint('Due to ', reason)
-    utime.sleep(5)
-    machine.reset()
-            
-
-if wlan.isconnected():
-    for x in range(10):
-        yellow_led.off()
-        utime.sleep(0.25)
-        yellow_led.on()
-        utime.sleep(0.25)
-else:
-    yellow_led.on()
-    utime.sleep(2)
-    restart_and_reconnect('No wifi')
-            
-
-dprint('IP:', wlan.ifconfig()[0])
+# get wifi credentials
+with open("wifi.dat") as f:
+    lines = f.readlines()
+for line in lines:
+    ssid, pwd, BLYNK_AUTH = line.strip("\n").split(";")
 
 timer = BlynkTimer()
-
 
 # Initialize Blynk
 try:
 #         blynk = BlynkLib.Blynk(BLYNK_AUTH, insecure=True)
-    blynk = BlynkLib.Blynk(wifimgr.get_profiles()[2],
+    blynk = BlynkLib.Blynk(BLYNK_AUTH,
         insecure=True,          # disable SSL/TLS
         server='fra1.blynk.cloud', # fra1.blynk.cloud or blynk.cloud
         port=80,                # set server port
@@ -64,8 +45,8 @@ def blynk_connected(ping):
 @blynk.on("disconnected")
 def blynk_disconnected():
     dprint('Blynk disconnected')
-    utime.sleep(5)
-#     restart_and_reconnect('Blynk server failure...')
+    sleep(5)
+    restart_and_reconnect('Blynk server failure...')
     
 
 # timeouts
@@ -84,7 +65,7 @@ def R8_timeout(): R8.off()
 
 @blynk.on("V1")
 def blynk_handle(value):
-    utime.sleep_ms(150)
+    sleep(0.15)
     if int(value[0]) == 1:
         R1.on()
         timer.set_timeout(timeout_delay, R1_timeout)
@@ -92,7 +73,7 @@ def blynk_handle(value):
 
 @blynk.on("V2")
 def blynk_handle(value):
-    utime.sleep_ms(150)
+    sleep(0.15)
     if int(value[0]) == 1:
         R2.on()
         timer.set_timeout(timeout_delay, R2_timeout)
@@ -100,7 +81,7 @@ def blynk_handle(value):
 
 @blynk.on("V3")
 def blynk_handle(value):
-    utime.sleep_ms(150)
+    sleep(0.15)
     if int(value[0]) == 1:
         R3.on()
         timer.set_timeout(timeout_delay, R3_timeout)
@@ -108,7 +89,7 @@ def blynk_handle(value):
 
 @blynk.on("V4")
 def blynk_handle(value):
-    utime.sleep_ms(150)
+    sleep(0.15)
     if int(value[0]) == 1:
         R4.on()
         timer.set_timeout(timeout_delay, R4_timeout)
@@ -116,7 +97,7 @@ def blynk_handle(value):
 
 @blynk.on("V5")
 def blynk_handle(value):
-    utime.sleep_ms(150)
+    sleep(0.15)
     if int(value[0]) == 1:
         R5.on()
         timer.set_timeout(timeout_delay, R5_timeout)
@@ -124,7 +105,7 @@ def blynk_handle(value):
 
 @blynk.on("V6")
 def blynk_handle(value):
-    utime.sleep_ms(150)
+    sleep(0.15)
     if int(value[0]) == 1:
         R6.on()
         timer.set_timeout(timeout_delay, R6_timeout)
@@ -132,7 +113,7 @@ def blynk_handle(value):
 
 @blynk.on("V7")
 def blynk_handle(value):
-    utime.sleep_ms(150)
+    sleep(0.15)
     if int(value[0]) == 1:
         R7.on()
         timer.set_timeout(timeout_delay, R7_timeout)
@@ -140,7 +121,7 @@ def blynk_handle(value):
 
 @blynk.on("V8")
 def blynk_handle(value):
-    utime.sleep_ms(150)
+    sleep(0.15)
     if int(value[0]) == 1:
         R8.on()
         timer.set_timeout(timeout_delay, R8_timeout)
@@ -149,40 +130,44 @@ def blynk_handle(value):
 # test relays
 @blynk.on("V9")
 def blynk_handle(value):
-    utime.sleep_ms(150)
+    sleep(0.15)
     if int(value[0]) == 1:
         for x in range(len(rls_arr)):
             rls_arr[x].on()
-            utime.sleep(0.5)
+            sleep(0.5)
             rls_arr[x].off()
-            utime.sleep(0.5)              
+            sleep(0.5)              
 
 
 def check_wifi():
-    if wlan.isconnected():
-        yellow_led.on()
-        rssi = wlan.status('rssi')
-        blynk.virtual_write(10, str(rssi))
-    else:
+    s = network.WLAN()
+    e_ssid = ssid.encode('UTF8')
+    try:
+        rssi = [x[3] for x in s.scan() if x[0] == e_ssid][0]
         yellow_led.off()
+        blynk.virtual_write(10, str(rssi))
+        yellow_led.on()
+    except IndexError as e:  # ssid not found.
+        dprint('IndexError', e)
+        rssi = -99        
         
         
 def Loop():
-    gc.collect()
-    while True:       
+    while True:
+        gc.collect()
         blynk.run()
         timer.run()
-        machine.idle()
 
 
-timer.set_interval(15, check_wifi) # check on wifi every 15 seconds
+# check on wifi every 15 seconds
+timer.set_interval(15, check_wifi) 
 
 # Run blynk in the main thread
 try:
-    import _thread
-#     Loop()
-    _thread.stack_size(5*1024)
-    _thread.start_new_thread(Loop, ())
-except:
-    restart_and_reconnect('In Loop')
-
+#     import _thread
+    Loop()
+#     _thread.stack_size(5*1024)
+#     _thread.start_new_thread(Loop, ())
+except Exception as e:
+    print(e)
+    restart_and_reconnect(e)
